@@ -90,28 +90,20 @@ jobs:
           terraform -chdir="$STACK_DIR" plan \
             -lock-timeout=5m \
             -out=tfplan.bin
-
-          # Only show the plan if tfplan.bin exists
-          if [ -f "$STACK_DIR/tfplan.bin" ]; then
-            terraform -chdir="$STACK_DIR" show -no-color tfplan.bin > "$STACK_DIR/plan.txt"
-          else
-            echo "No tfplan.bin created — skipping show step."
-          fi
         continue-on-error: true
-        
+
       - name: Upload Plan
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ENV }}-${{ env.STACK }}-plan
-          path: envs/${{ env.ENV }}/${{ env.STACK }}/plan.txt
+          path: envs/${{ env.ENV }}/${{ env.STACK }}/tfplan.bin
 
       - name: Comment plan on PR
         if: github.event_name == 'pull_request'
-        uses: thollander/actions-comment-pull-request@v2
+        uses: borchero/terraform-plan-comment@v2
         with:
-          filePath: envs/${{ env.ENV }}/${{ env.STACK }}/plan.txt
-          comment_tag: ${{ env.ENV }}-${{ env.STACK }}-plan
-
+          token: ${{ github.token }}
+          planfile: envs/${{ env.ENV }}/${{ env.STACK }}/tfplan.bin
       - name: Fail if plan failed
         if: steps.plan.outcome == 'failure'
         run: exit 1
