@@ -27,6 +27,11 @@ on:
       AWS_ROLE_ARN:
         required: false   # use this if you prefer passing full role ARN
 
+permissions:
+  id-token: write     # for AWS OIDC
+  contents: read
+  pull-requests: write
+
 jobs:
   tf:
     name: ${{ inputs.env }} / ${{ inputs.region }} / ${{ inputs.stack }}
