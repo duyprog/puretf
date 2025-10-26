@@ -27,6 +27,7 @@ jobs:
             modules/**
       - id: mk
         run: |
+          set -x 
           # Derive stacks to plan based on changed files.
           # If only modules changed -> plan ALL stacks in both envs.
           changed="$(printf '%s\n' ${{ steps.cf.outputs.all_changed_files }})"
