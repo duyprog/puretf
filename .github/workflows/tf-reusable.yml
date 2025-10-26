@@ -92,11 +92,11 @@ jobs:
             -out=tfplan.bin
         continue-on-error: true
 
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ENV }}-${{ env.STACK }}-plan
-          path: envs/${{ env.ENV }}/${{ env.STACK }}/tfplan.bin
+      # - name: Upload Plan
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ${{ env.ENV }}-${{ env.STACK }}-plan
+      #     path: envs/${{ env.ENV }}/${{ env.STACK }}/tfplan.bin
 
       - name: Comment plan on PR
         if: github.event_name == 'pull_request'
