@@ -89,7 +89,7 @@ jobs:
           echo "Running Terraform plan in $STACK_DIR"
           terraform -chdir="$STACK_DIR" plan \
             -lock-timeout=5m \
-            -out=tfplan.bin
+            -out=${STACK_DIR}/tfplan.bin
         continue-on-error: true
 
       # - name: Upload Plan
