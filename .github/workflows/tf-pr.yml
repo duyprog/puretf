@@ -78,6 +78,6 @@ jobs:
       stack: ${{ matrix.stack }}
       region: ${{ matrix.region }}
       account_id: ${{ matrix.account_id }}
-      apply: false
+      role_name: "gha-tf"
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}

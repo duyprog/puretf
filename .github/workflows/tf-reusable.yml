@@ -59,7 +59,7 @@ jobs:
         with:
           aws-region: ${{ env.REGION }}
           # Either pass full ARN by secret, or compose it from account_id+role_name:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN || format('arn:aws:iam::{0}:role/{1}', env.ACCOUNT_ID, env.ROLE_NAME) }}
+          role-to-assume: ${{ format('arn:aws:iam::{0}:role/{1}', env.ACCOUNT_ID, env.ROLE_NAME) }}
           role-session-name: gha-${{ env.ENV }}-${{ env.STACK }}
 
       - name: Setup Terraform
@@ -86,9 +86,6 @@ jobs:
           VARFILE="${STACK_DIR}/${ENV}.${REGION}.tfvars"
           terraform -chdir="$STACK_DIR" plan \
             -lock-timeout=5m \
-            -var="account_id=${ACCOUNT_ID}" \
-            -var="region=${REGION}" \
-            -var="role_name=${ROLE_NAME}" \
             -out=tfplan.bin
           terraform -chdir="$STACK_DIR" show -no-color tfplan.bin > plan.txt
         continue-on-error: true
