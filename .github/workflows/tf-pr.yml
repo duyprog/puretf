@@ -12,6 +12,10 @@ permissions:
   contents: read
   pull-requests: write
 
+env: 
+  DEV_ACCOUNT_ID: "565138482777"
+  PROD_ACCOUNT_ID: "123456789012"
+
 jobs:
   discover:
     runs-on: ubuntu-latest
@@ -26,44 +30,55 @@ jobs:
             envs/**
             modules/**
       - id: mk
+        shell: bash
         run: |
-          set -x 
-          # Derive stacks to plan based on changed files.
-          # If only modules changed -> plan ALL stacks in both envs.
+          set -euo pipefail
+          set -x
+
           changed="$(printf '%s\n' ${{ steps.cf.outputs.all_changed_files }})"
           list=""
+
           if echo "$changed" | grep -q '^modules/'; then
-            # enumerate envs/*/* (stacks one level under each env)
+            # modules changed → include ALL stacks under each env
             while IFS= read -r d; do
-              env=$(echo "$d" | cut -d/ -f2)
-              stack=$(echo "$d" | cut -d/ -f3)
-              # default region per env (tweak if needed)
+              env="$(echo "$d" | cut -d/ -f2)"
+              stack="$(echo "$d" | cut -d/ -f3)"
               region="us-east-1"
-              account_id="${env=='prod'?'123456789012':'565138482777'}"
+              if [ "$env" = "prod" ]; then
+                account_id="${{ env.PROD_ACCOUNT_ID }}"
+              else
+                account_id="${{ env.DEV_ACCOUNT_ID }}"
+              fi
               list="${list}{\"env\":\"${env}\",\"stack\":\"${stack}\",\"region\":\"${region}\",\"account_id\":\"${account_id}\"},"
-            done < <(find envs -maxdepth 2 -mindepth 2 -type d | sed 's#^./##' | sort)
+            done < <(find envs -maxdepth 2 -mindepth 2 -type d | sort)
           else
-            # pick stacks whose path changed: envs/<env>/<stack>/...
+            # only stacks whose paths changed
+            : > /tmp/keys || true
             while IFS= read -r f; do
               case "$f" in
                 envs/*/*/*)
-                  env=$(echo "$f" | cut -d/ -f2)
-                  stack=$(echo "$f" | cut -d/ -f3)
-                  region="us-east-1"
-                  account_id="${env=='prod'?'123456789012':'565138482777'}"
-                  key="${env}/${stack}"
-                  echo "$key" >> /tmp/keys
+                  env="$(echo "$f" | cut -d/ -f2)"
+                  stack="$(echo "$f" | cut -d/ -f3)"
+                  printf '%s/%s\n' "$env" "$stack" >> /tmp/keys
                 ;;
               esac
             done <<< "$changed"
-            for key in $(sort -u /tmp/keys); do
-              env=$(echo "$key" | cut -d/ -f1)
-              stack=$(echo "$key" | cut -d/ -f2)
-              region="us-east-1"
-              account_id="${env=='prod'?'123456789012':'565138482777'}"
-              list="${list}{\"env\":\"${env}\",\"stack\":\"${stack}\",\"region\":\"${region}\",\"account_id\":\"${account_id}\"},"
-            done
+
+            if [ -s /tmp/keys ]; then
+              while IFS= read -r key; do
+                env="$(echo "$key" | cut -d/ -f1)"
+                stack="$(echo "$key" | cut -d/ -f2)"
+                region="us-east-1"
+                if [ "$env" = "prod" ]; then
+                  account_id="${{ env.PROD_ACCOUNT_ID }}" 
+                else
+                  account_id="${{ env.DEV_ACCOUNT_ID }}"
+                fi
+                list="${list}{\"env\":\"${env}\",\"stack\":\"${stack}\",\"region\":\"${region}\",\"account_id\":\"${account_id}\"},"
+              done < <(sort -u /tmp/keys)
+            fi
           fi
+
           json="{\"include\":[${list%,}]}"
           echo "matrix=$json" >> "$GITHUB_OUTPUT"
 
