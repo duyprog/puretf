@@ -1,0 +1,78 @@
+name: TF Plan (PR)
+
+on:
+  pull_request:
+    paths:
+      - 'envs/**'
+      - 'modules/**'
+      - '.github/workflows/**'
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.mk.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tj-actions/changed-files@v45
+        id: cf
+        with:
+          files: |
+            envs/**
+            modules/**
+      - id: mk
+        run: |
+          # Derive stacks to plan based on changed files.
+          # If only modules changed -> plan ALL stacks in both envs.
+          changed="$(printf '%s\n' ${{ steps.cf.outputs.all_changed_files }})"
+          list=""
+          if echo "$changed" | grep -q '^modules/'; then
+            # enumerate envs/*/* (stacks one level under each env)
+            while IFS= read -r d; do
+              env=$(echo "$d" | cut -d/ -f2)
+              stack=$(echo "$d" | cut -d/ -f3)
+              # default region per env (tweak if needed)
+              region="us-east-1"
+              account_id="${env=='prod'?'123456789012':'111111111111'}"
+              list="${list}{\"env\":\"${env}\",\"stack\":\"${stack}\",\"region\":\"${region}\",\"account_id\":\"${account_id}\"},"
+            done < <(find envs -maxdepth 2 -mindepth 2 -type d | sed 's#^./##' | sort)
+          else
+            # pick stacks whose path changed: envs/<env>/<stack>/...
+            while IFS= read -r f; do
+              case "$f" in
+                envs/*/*/*)
+                  env=$(echo "$f" | cut -d/ -f2)
+                  stack=$(echo "$f" | cut -d/ -f3)
+                  region="us-east-1"
+                  account_id="${env=='prod'?'123456789012':'111111111111'}"
+                  key="${env}/${stack}"
+                  echo "$key" >> /tmp/keys
+                ;;
+              esac
+            done <<< "$changed"
+            for key in $(sort -u /tmp/keys); do
+              env=$(echo "$key" | cut -d/ -f1)
+              stack=$(echo "$key" | cut -d/ -f2)
+              region="us-east-1"
+              account_id="${env=='prod'?'123456789012':'111111111111'}"
+              list="${list}{\"env\":\"${env}\",\"stack\":\"${stack}\",\"region\":\"${region}\",\"account_id\":\"${account_id}\"},"
+            done
+          fi
+          json="{\"include\":[${list%,}]}"
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+
+  plan:
+    needs: discover
+    if: ${{ fromJson(needs.discover.outputs.matrix).include != null && (join(fromJson(needs.discover.outputs.matrix).include, '') != '') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+    uses: ./.github/workflows/tf-reusable.yml
+    with:
+      env: ${{ matrix.env }}
+      stack: ${{ matrix.stack }}
+      region: ${{ matrix.region }}
+      account_id: ${{ matrix.account_id }}
+      apply: false
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}

@@ -1,0 +1,118 @@
+name: TF Reusable
+
+on:
+  workflow_call:
+    inputs:
+      env:
+        type: string
+        required: true
+      stack:
+        type: string
+        required: true
+      region:
+        type: string
+        required: true
+      account_id:
+        type: string
+        required: true
+      role_name:
+        type: string
+        required: false
+        default: OrganizationAccountAccessRole
+      apply:
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      AWS_ROLE_ARN:
+        required: false   # use this if you prefer passing full role ARN
+
+jobs:
+  tf:
+    name: ${{ inputs.env }} / ${{ inputs.region }} / ${{ inputs.stack }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.apply && inputs.env == 'prod' && 'prod' || '' }} # protects prod applies
+    permissions:
+      id-token: write     # for AWS OIDC
+      contents: read
+      pull-requests: write
+
+    env:
+      ENV: ${{ inputs.env }}
+      STACK: ${{ inputs.stack }}
+      REGION: ${{ inputs.region }}
+      ACCOUNT_ID: ${{ inputs.account_id }}
+      ROLE_NAME: ${{ inputs.role_name }}
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.REGION }}
+          # Either pass full ARN by secret, or compose it from account_id+role_name:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN || format('arn:aws:iam::{0}:role/{1}', env.ACCOUNT_ID, env.ROLE_NAME) }}
+          role-session-name: gha-${{ env.ENV }}-${{ env.STACK }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform Init
+        run: |
+          STACK_DIR="envs/${ENV}/${STACK}"
+          terraform -chdir="$STACK_DIR" init \
+            -backend-config="region=${REGION}" \
+            -backend-config="key=${REGION}/${STACK}.tfstate" \
+            -backend-config="`pwd`/envs/${ENV}/backend.hcl" \
+            -reconfigure
+
+      - name: Terraform Validate
+        run: terraform -chdir="envs/${ENV}/${STACK}" validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          STACK_DIR="envs/${ENV}/${STACK}"
+          VARFILE="${STACK_DIR}/${ENV}.${REGION}.tfvars"
+          terraform -chdir="$STACK_DIR" plan \
+            -lock-timeout=5m \
+            -var="account_id=${ACCOUNT_ID}" \
+            -var="region=${REGION}" \
+            -var="role_name=${ROLE_NAME}" \
+            -var-file="${VARFILE}" \
+            -out=tfplan.bin
+          terraform -chdir="$STACK_DIR" show -no-color tfplan.bin > plan.txt
+        continue-on-error: true
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ENV }}-${{ env.STACK }}-plan
+          path: envs/${{ env.ENV }}/${{ env.STACK }}/plan.txt
+
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          filePath: envs/${{ env.ENV }}/${{ env.STACK }}/plan.txt
+          comment_tag: ${{ env.ENV }}-${{ env.STACK }}-plan
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Terraform Apply (guarded)
+        if: ${{ inputs.apply }}
+        run: |
+          STACK_DIR="envs/${ENV}/${STACK}"
+          terraform -chdir="$STACK_DIR" apply -auto-approve tfplan.bin
+        # For prod, this step is additionally protected by the Environment gate above
+
+    concurrency:
+      group: tf-${{ inputs.env }}-${{ inputs.region }}-${{ inputs.stack }}
+      cancel-in-progress: false

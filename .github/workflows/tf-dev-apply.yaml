@@ -1,0 +1,58 @@
+name: TF Apply (dev)
+
+on:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - 'envs/dev/**'
+      - 'modules/**'
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.mk.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tj-actions/changed-files@v45
+        id: cf
+      - id: mk
+        run: |
+          changed="$(printf '%s\n' ${{ steps.cf.outputs.all_changed_files }})"
+          list=""
+          if echo "$changed" | grep -q '^modules/'; then
+            for d in envs/dev/*; do
+              [ -d "$d" ] || continue
+              stack=$(basename "$d")
+              list="${list}{\"env\":\"dev\",\"stack\":\"${stack}\",\"region\":\"us-east-1\",\"account_id\":\"111111111111\"},"
+            done
+          else
+            while IFS= read -r f; do
+              case "$f" in
+                envs/dev/*/*)
+                  stack=$(echo "$f" | cut -d/ -f3)
+                  echo "$stack"
+                ;;
+              esac
+            done <<< "$changed" | sort -u | while read -r s; do
+              list="${list}{\"env\":\"dev\",\"stack\":\"${s}\",\"region\":\"us-east-1\",\"account_id\":\"111111111111\"},"
+            done
+          fi
+          json="{\"include\":[${list%,}]}"
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+
+  apply:
+    needs: discover
+    if: ${{ fromJson(needs.discover.outputs.matrix).include != null && (join(fromJson(needs.discover.outputs.matrix).include, '') != '') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+    uses: ./.github/workflows/tf-reusable.yml
+    with:
+      env: dev
+      stack: ${{ matrix.stack }}
+      region: us-east-1
+      account_id: 111111111111
+      apply: true
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
