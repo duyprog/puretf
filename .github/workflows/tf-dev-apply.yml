@@ -6,6 +6,11 @@ on:
     paths:
       - 'envs/dev/**'
       - 'modules/**'
+      
+permissions:
+  id-token: write     # for AWS OIDC
+  contents: read
+  pull-requests: write
 
 jobs:
   discover:
