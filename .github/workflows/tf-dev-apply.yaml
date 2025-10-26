@@ -2,7 +2,7 @@ name: TF Apply (dev)
 
 on:
   push:
-    branches: [ "dev" ]
+    branches: [ "main" ]
     paths:
       - 'envs/dev/**'
       - 'modules/**'
