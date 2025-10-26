@@ -38,7 +38,7 @@ jobs:
               stack=$(echo "$d" | cut -d/ -f3)
               # default region per env (tweak if needed)
               region="us-east-1"
-              account_id="${env=='prod'?'123456789012':'111111111111'}"
+              account_id="${env=='prod'?'123456789012':'565138482777'}"
               list="${list}{\"env\":\"${env}\",\"stack\":\"${stack}\",\"region\":\"${region}\",\"account_id\":\"${account_id}\"},"
             done < <(find envs -maxdepth 2 -mindepth 2 -type d | sed 's#^./##' | sort)
           else
@@ -49,7 +49,7 @@ jobs:
                   env=$(echo "$f" | cut -d/ -f2)
                   stack=$(echo "$f" | cut -d/ -f3)
                   region="us-east-1"
-                  account_id="${env=='prod'?'123456789012':'111111111111'}"
+                  account_id="${env=='prod'?'123456789012':'565138482777'}"
                   key="${env}/${stack}"
                   echo "$key" >> /tmp/keys
                 ;;
@@ -59,7 +59,7 @@ jobs:
               env=$(echo "$key" | cut -d/ -f1)
               stack=$(echo "$key" | cut -d/ -f2)
               region="us-east-1"
-              account_id="${env=='prod'?'123456789012':'111111111111'}"
+              account_id="${env=='prod'?'123456789012':'565138482777'}"
               list="${list}{\"env\":\"${env}\",\"stack\":\"${stack}\",\"region\":\"${region}\",\"account_id\":\"${account_id}\"},"
             done
           fi

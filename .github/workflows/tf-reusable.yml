@@ -89,7 +89,6 @@ jobs:
             -var="account_id=${ACCOUNT_ID}" \
             -var="region=${REGION}" \
             -var="role_name=${ROLE_NAME}" \
-            -var-file="${VARFILE}" \
             -out=tfplan.bin
           terraform -chdir="$STACK_DIR" show -no-color tfplan.bin > plan.txt
         continue-on-error: true
